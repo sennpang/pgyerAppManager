@@ -4,6 +4,9 @@ use clap::{App, Arg, ArgMatches};
 use reqwest::multipart::{self, Form};
 use serde_json::{Result, Value};
 const INSTALL_PASSWORD: &str = "2";
+const INSTALL_AT_DATE_RANGE: &str = "1";
+const INSTALL_TYPE_ANDROID: &str = "2";
+// const INSTALL_TYPE_IOS: &str = "1";
 async fn upload_file(data: &Value) -> Result<()> {
     let matches = get_command_params();
 
@@ -327,16 +330,21 @@ async fn get_cos_token(matches: &ArgMatches<'_>, build_type: &String) -> Result<
         ),
         (
             "buildInstallType",
-            matches.value_of("installType").unwrap_or("1").to_string(),
+            matches
+                .value_of("installType")
+                .unwrap_or(INSTALL_TYPE_ANDROID)
+                .to_string(),
         ),
     ];
 
-    if matches.value_of("installType") == Some("2") && matches.value_of("password").is_none() {
+    if matches.value_of("installType") == Some(INSTALL_PASSWORD)
+        && matches.value_of("password").is_none()
+    {
         println!("密码安装方式需要传递 password 参数");
         process::exit(0);
     }
 
-    if matches.value_of("installDate") == Some("1")
+    if matches.value_of("installDate") == Some(INSTALL_AT_DATE_RANGE)
         && (matches.value_of("installStartDate").is_none()
             || matches.value_of("installEndDate").is_none())
     {
