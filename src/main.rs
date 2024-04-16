@@ -1,7 +1,10 @@
 use std::{collections::HashMap, env, fs, path::Path, process, thread, time::Duration};
 
 use clap::{App, Arg, ArgMatches};
-use reqwest::multipart::{self, Form};
+use reqwest::{
+    multipart::{self, Form},
+    Client,
+};
 use serde_json::{Result, Value};
 const INSTALL_PASSWORD: &str = "2";
 const INSTALL_AT_DATE_RANGE: &str = "1";
@@ -28,8 +31,10 @@ async fn upload_file(data: &Value) -> Result<()> {
         // .part("file", Part::stream(body));
         .part(
             "file",
-            reqwest::multipart::Part::bytes(std::fs::read(&file_path.unwrap()).expect("233333"))
-                .file_name(file_name.unwrap().to_string_lossy().to_string()),
+            reqwest::multipart::Part::bytes(
+                std::fs::read(&file_path.unwrap()).expect("读取文件失败!"),
+            )
+            .file_name(file_name.unwrap().to_string_lossy().to_string()),
         );
 
     let client = reqwest::Client::builder().build().unwrap();
@@ -118,6 +123,14 @@ async fn main() {
         upload().await;
     }
 
+    if matches.is_present("check") {
+        check_proxy().await;
+    }
+
+    if matches.is_present("list") {
+        get_app_list().await;
+    }
+
     if matches.value_of("delete").is_some() {
         delete_app(&matches).await;
     }
@@ -145,7 +158,7 @@ async fn upload() {
     let matches = get_command_params();
 
     let file_path = matches.value_of("file");
-    let mut build_type = "apk";
+    let build_type;
     if let Some(name) = file_path {
         let name_str = name.to_string();
         if fs::metadata(&name_str).is_err() {
@@ -164,7 +177,10 @@ async fn upload() {
                     process::exit(0);
                 }
             }
-            None => println!("文件格式不正确"),
+            None => {
+                println!("文件格式不正确");
+                process::exit(0);
+            }
         }
     } else {
         println!("请携带文件参数来上传应用, -h 获取更多帮助");
@@ -180,41 +196,49 @@ async fn upload() {
     }
 }
 
+async fn check_proxy() {
+    let client = Client::new();
+    let response = client.get("https://www.google.com").send().await;
+    match response {
+        Ok(res) => {
+            // Check the response status
+            if res.status().is_success() {
+                // Request was successful, process the response body
+                // let body = res.text().await.unwrap();
+                // println!("Response body: {}", body);
+                println!("您使用了代理, 可能导致上传失败, 请关闭代理或者使 pgyer.com 走直连通道!");
+            } else {
+                // Request failed with a non-success status code
+                println!("Request failed with status code: {}", res.status());
+            }
+        }
+        Err(_err) => {
+            // Request failed, handle the error
+            // println!("Request error: {}", err);
+        }
+    }
+}
+
 fn get_command_params() -> ArgMatches<'static> {
     let matches = App::new("PGYER APP MANAGER")
         .version("0.1")
         .author("PANG")
         .about("PGYER APP MANAGER")
         .arg(
-            Arg::with_name("api_key")
-                .short("k")
-                .long("key")
-                .value_name("STRING")
-                .help("Sets the api key")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("delete")
-                .short("d")
-                .long("delete")
-                .value_name("STRING")
-                .help("app key that you want to delete")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("file")
-                .short("f")
-                .long("file")
-                .value_name("FILE")
-                .help("Sets the upload file")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("channel")
                 .short("c")
                 .long("channel")
                 .value_name("STRING")
                 .help("build channel shortcut")
+                .takes_value(true),
+        )
+        .arg(Arg::with_name("check").long("check").help("check network"))
+        .arg(
+            Arg::with_name("description")
+                .short("d")
+                .long("description")
+                .value_name("STRING")
+                .help("build update description")
                 .takes_value(true),
         )
         .arg(
@@ -226,11 +250,11 @@ fn get_command_params() -> ArgMatches<'static> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("installStartDate")
-                .short("s")
-                .long("installStartDate")
-                .value_name("STRING")
-                .help("build install end date, format: yyyy-MM-dd")
+            Arg::with_name("file")
+                .short("f")
+                .long("file")
+                .value_name("FILE")
+                .help("Sets the upload file")
                 .takes_value(true),
         )
         .arg(
@@ -242,11 +266,33 @@ fn get_command_params() -> ArgMatches<'static> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("description")
-                .short("d")
-                .long("description")
+            Arg::with_name("api_key")
+                .short("k")
+                .long("key")
                 .value_name("STRING")
-                .help("build update description")
+                .help("Sets the api key")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("list")
+                .short("l")
+                .long("list")
+                .help("list my apps"),
+        )
+        .arg(
+            Arg::with_name("delete")
+                .short("r")
+                .long("remove")
+                .value_name("STRING")
+                .help("app key that you want to delete")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("installStartDate")
+                .short("s")
+                .long("installStartDate")
+                .value_name("STRING")
+                .help("build install end date, format: yyyy-MM-dd")
                 .takes_value(true),
         )
         .arg(
@@ -386,6 +432,23 @@ async fn delete_app(matches: &ArgMatches<'_>) {
     let res = request(pairs, url.to_owned()).await.unwrap();
     let build_code = res.get("code").unwrap().as_i64().unwrap() as i32;
     println!("删除中...");
+    if build_code != 0 {
+        println!("{}", res.get("message").unwrap());
+        process::exit(0);
+    }
+
+    println!("删除成功");
+    process::exit(0);
+}
+
+async fn get_app_list() {
+    let api_key = get_api_key();
+
+    let pairs = vec![("_api_key", api_key), ("page", "0".to_string())];
+
+    let url = "https://www.pgyer.com/apiv2/app/listMy";
+    let res = request(pairs, url.to_owned()).await.unwrap();
+    let build_code = res.get("code").unwrap().as_i64().unwrap() as i32;
     if build_code != 0 {
         println!("{}", res.get("message").unwrap());
         process::exit(0);
