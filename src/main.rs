@@ -40,7 +40,7 @@ async fn upload_file(data: &Value) -> Result<()> {
     let start_time = Instant::now();
 
     // 按照 6 MB/s 预估
-    println!("上传完成预估需要 {} 秒", file_size / 1024 / 1024 / 6);
+    // println!("上传完成预估需要 {} 秒", file_size / 1024 / 1024 / 6);
 
     let current_time = Local::now();
     println!("当前时间: {}", current_time);
@@ -250,6 +250,7 @@ async fn check_proxy() {
             }
         }
         Err(_err) => {
+            println!("检测网络正常!");
             // Request failed, handle the error
             // println!("Request error: {}", err);
         }
