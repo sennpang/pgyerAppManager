@@ -1,5 +1,12 @@
-use std::{collections::HashMap, env, fs, path::Path, process, thread, time::Duration};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::Path,
+    process, thread,
+    time::{Duration, Instant},
+};
 
+use chrono::Local;
 use clap::{App, Arg, ArgMatches};
 use reqwest::{
     multipart::{self, Form},
@@ -8,6 +15,8 @@ use reqwest::{
 use serde_json::{Result, Value};
 const INSTALL_PASSWORD: &str = "2";
 const INSTALL_AT_DATE_RANGE: &str = "1";
+const MB: u64 = 1024 * 1024;
+const GB: u64 = MB * 1024;
 // const INSTALL_TYPE_ANDROID: &str = "2";
 // const INSTALL_TYPE_IOS: &str = "1";
 async fn upload_file(data: &Value) -> Result<()> {
@@ -15,6 +24,27 @@ async fn upload_file(data: &Value) -> Result<()> {
 
     let file_path = matches.value_of("file");
     let file_name = Path::new(file_path.unwrap()).file_name();
+    // Retrieve the metadata of the file
+    let metadata = fs::metadata(file_path.unwrap()).expect("Failed to read metadata");
+
+    // Extract the file size from the metadata
+    let file_size = metadata.len();
+
+    // 大于 2GB 不让传
+    if file_size > (2 * GB) {
+        println!("当前文件大于 2GB, 无法上传");
+        process::exit(0);
+    }
+
+    // Start measuring the run time
+    let start_time = Instant::now();
+
+    // 按照 6 MB/s 预估
+    println!("上传完成预估需要 {} 秒", file_size / 1024 / 1024 / 6);
+
+    let current_time = Local::now();
+    println!("当前时间: {}", current_time);
+
     let form = reqwest::multipart::Form::new()
         .text(
             "signature",
@@ -52,7 +82,13 @@ async fn upload_file(data: &Value) -> Result<()> {
     let build_deal_code: Vec<i32> = vec![1246, 1247];
     let error_code = 1216;
 
+    // Print the run time duration
+    let duration = start_time.elapsed().as_secs_f32();
+    println!("上传耗时: {:.2} 秒", duration); // Calculate the run time duration
+
     println!("上传完成, 服务端处理中...");
+    let current_time = Local::now();
+    println!("当前时间: {}", current_time);
     while build_code >= 0 {
         let build_info = get_build_info(data["key"].as_str().unwrap().to_string())
             .await
@@ -65,6 +101,7 @@ async fn upload_file(data: &Value) -> Result<()> {
         }
 
         if build_code == 0 {
+            println!("应用信息: ");
             println!(
                 "buildVersion: {}",
                 build_info["data"]["buildBuildVersion"]
