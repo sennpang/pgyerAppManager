@@ -224,6 +224,8 @@ async fn upload() {
         process::exit(0);
     }
 
+    check_proxy().await;
+
     let token_info = get_cos_token(&matches, &build_type.to_string())
         .await
         .unwrap();
@@ -253,6 +255,27 @@ async fn check_proxy() {
             println!("检测网络正常!");
             // Request failed, handle the error
             // println!("Request error: {}", err);
+        }
+    }
+
+    let response = client
+        .get("https://pgy-apps-1251724549.cos.ap-guangzhou.myqcloud.com/")
+        .send()
+        .await;
+    match response {
+        Ok(res) => {
+            if res.status().is_success() {
+            } else if res.status() == 403 {
+                // println!("检测网络正常!");
+            } else {
+                println!(
+                    "myqcloud.com Request failed with status code: {}",
+                    res.status()
+                );
+            }
+        }
+        Err(_err) => {
+            println!("Request error: {}", _err);
         }
     }
 }
