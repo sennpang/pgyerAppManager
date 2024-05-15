@@ -1,5 +1,6 @@
 # pgyerAppManager
 
+```
 USAGE:
     pgyer-uploader [FLAGS] [OPTIONS]
 
@@ -23,3 +24,11 @@ OPTIONS:
     -t, --installType <NUMBER>         build install type, 1=public, 2=password, 3=invite
         --page <NUMBER>                page number
     -p, --password <STRING>            build password, required if installType=2
+```
+## 使用说明
+
+命令格式：
+
+    ./pgyer-uploader -k <your-pgyer-api-key> -f <your-ipa-or-apk-file-path>
+    
+**apikey 只需要设置一次, 会保存到本地, 后面使用不需要 -k 参数**
