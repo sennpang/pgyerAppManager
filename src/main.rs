@@ -165,7 +165,7 @@ async fn main() {
     }
 
     if matches.is_present("list") {
-        get_app_list().await;
+        get_app_list(matches.value_of("page").unwrap_or("1")).await;
     }
 
     if matches.value_of("delete").is_some() {
@@ -341,6 +341,12 @@ fn get_command_params() -> ArgMatches<'static> {
                 .help("list my apps"),
         )
         .arg(
+            Arg::with_name("page")
+                .long("page")
+                .value_name("NUMBER")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("delete")
                 .short("r")
                 .long("remove")
@@ -499,10 +505,10 @@ async fn delete_app(matches: &ArgMatches<'_>) {
     process::exit(0);
 }
 
-async fn get_app_list() {
+async fn get_app_list(page: &str) {
     let api_key = get_api_key();
 
-    let pairs = vec![("_api_key", api_key), ("page", "0".to_string())];
+    let pairs = vec![("_api_key", api_key), ("page", page.to_string())];
 
     let url = "https://www.pgyer.com/apiv2/app/listMy";
     let res = request(pairs, url.to_owned()).await.unwrap();
@@ -512,7 +518,9 @@ async fn get_app_list() {
         process::exit(0);
     }
 
-    println!("删除成功");
+    let formatted_json = serde_json::to_string_pretty(&res.get("data")).unwrap();
+    println!("{}", formatted_json);
+
     process::exit(0);
 }
 
