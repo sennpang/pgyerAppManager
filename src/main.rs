@@ -69,33 +69,36 @@ async fn upload_file(data: &Value) -> Result<()> {
 
     let client = reqwest::Client::builder().build().unwrap();
     let request = client
-        .request(
-            reqwest::Method::POST,
-            data["endpoint"].as_str().unwrap().to_owned(),
-        )
+        .request(reqwest::Method::POST, data["endpoint"].as_str().unwrap())
         .multipart(form);
 
     println!("上传中...");
-    request.send().await.expect("上传失败!");
-    // let body = response.text().await.unwrap();
+
+    let response = request.send().await.unwrap();
+    let status = response.status();
+
+    if status != 204 {
+        println!("上传失败!!!");
+        println!("{}", response.text().await.unwrap());
+        process::exit(0);
+    }
+
     let mut build_code = 1246;
-    let build_deal_code: Vec<i32> = vec![1246, 1247];
+    let build_deal_code = vec![1246, 1247];
     let error_code = 1216;
 
-    // Print the run time duration
     let duration = start_time.elapsed().as_secs_f32();
     println!("上传耗时: {:.2} 秒", duration); // Calculate the run time duration
 
     println!("上传完成, 服务端处理中...");
     let current_time = Local::now();
     println!("当前时间: {}", current_time);
-    while build_code >= 0 {
-        let build_info = get_build_info(data["key"].as_str().unwrap().to_string())
-            .await
-            .unwrap();
-        build_code = build_info.get("code").unwrap().as_i64().unwrap() as i32;
+    while build_code != 0 {
+        let build_info = get_build_info(data["key"].as_str().unwrap()).await.unwrap();
+        build_code = build_info.get("code").unwrap().as_i64().unwrap();
         thread::sleep(Duration::from_secs(1));
 
+        println!("{}", build_code);
         if build_deal_code.contains(&build_code) {
             continue;
         }
@@ -104,38 +107,23 @@ async fn upload_file(data: &Value) -> Result<()> {
             println!("应用信息: ");
             println!(
                 "buildVersion: {}",
-                build_info["data"]["buildBuildVersion"]
-                    .as_str()
-                    .unwrap()
-                    .to_string()
+                build_info["data"]["buildBuildVersion"].as_str().unwrap()
             );
             println!(
                 "buildCreated: {}",
-                build_info["data"]["buildCreated"]
-                    .as_str()
-                    .unwrap()
-                    .to_string()
+                build_info["data"]["buildCreated"].as_str().unwrap()
             );
             println!(
                 "buildDescription: {}",
-                build_info["data"]["buildDescription"]
-                    .as_str()
-                    .unwrap()
-                    .to_string()
+                build_info["data"]["buildDescription"].as_str().unwrap()
             );
             println!(
                 "buildQRCodeURL: {}",
-                build_info["data"]["buildQRCodeURL"]
-                    .as_str()
-                    .unwrap()
-                    .to_string()
+                build_info["data"]["buildQRCodeURL"].as_str().unwrap()
             );
             println!(
                 "buildShortcutUrl: https://www.pgyer.com/{}",
-                build_info["data"]["buildShortcutUrl"]
-                    .as_str()
-                    .unwrap()
-                    .to_string()
+                build_info["data"]["buildShortcutUrl"].as_str().unwrap()
             );
             process::exit(0);
         }
@@ -197,7 +185,7 @@ async fn upload() {
     let file_path = matches.value_of("file");
     let build_type;
     if let Some(name) = file_path {
-        let name_str = name.to_string();
+        let name_str = name;
         if fs::metadata(&name_str).is_err() {
             println!("文件不存在!");
             process::exit(0);
@@ -209,7 +197,7 @@ async fn upload() {
         match extension {
             Some(ext) => {
                 build_type = ext;
-                if !build_deal_code.contains(&ext) {
+                if !build_deal_code.contains(&ext.to_lowercase().as_str()) {
                     println!("只支持ipa/apk");
                     process::exit(0);
                 }
@@ -226,9 +214,7 @@ async fn upload() {
 
     check_proxy().await;
 
-    let token_info = get_cos_token(&matches, &build_type.to_string())
-        .await
-        .unwrap();
+    let token_info = get_cos_token(&matches, build_type).await.unwrap();
     let res = upload_file(&token_info.get("data").unwrap()).await;
     match res {
         error => println!("{:?}", error),
@@ -409,41 +395,35 @@ fn get_api_key() -> String {
     }
 }
 
-async fn get_cos_token(matches: &ArgMatches<'_>, build_type: &String) -> Result<Value> {
+async fn get_cos_token(matches: &ArgMatches<'_>, build_type: &str) -> Result<Value> {
     let api_key = get_api_key();
-    let pairs = vec![
-        ("_api_key", api_key),
-        ("buildType", build_type.to_string()),
+    let pairs: Vec<(&str, &str)> = vec![
+        ("_api_key", &api_key),
+        ("buildType", build_type),
         (
             "buildChannelShortcut",
-            matches.value_of("channel").unwrap_or("").to_string(),
+            matches.value_of("channel").unwrap_or(""),
         ),
         (
             "buildInstallEndDate",
-            matches.value_of("installEndDate").unwrap_or("").to_string(),
+            matches.value_of("installEndDate").unwrap_or(""),
         ),
         (
             "buildInstallStartDate",
-            matches
-                .value_of("installStartDate")
-                .unwrap_or("")
-                .to_string(),
+            matches.value_of("installStartDate").unwrap_or(""),
         ),
         (
             "buildInstallDate",
-            matches.value_of("installDate").unwrap_or("").to_string(),
+            matches.value_of("installDate").unwrap_or(""),
         ),
         (
             "buildDescription",
-            matches.value_of("description").unwrap_or("").to_string(),
+            matches.value_of("description").unwrap_or(""),
         ),
-        (
-            "buildPassword",
-            matches.value_of("password").unwrap_or("").to_string(),
-        ),
+        ("buildPassword", matches.value_of("password").unwrap_or("")),
         (
             "buildInstallType",
-            matches.value_of("installType").unwrap_or("").to_string(),
+            matches.value_of("installType").unwrap_or(""),
         ),
     ];
 
@@ -472,7 +452,7 @@ async fn get_cos_token(matches: &ArgMatches<'_>, build_type: &String) -> Result<
     }
 
     let url = "https://www.pgyer.com/apiv2/app/getCOSToken";
-    let res = request(pairs, url.to_owned()).await.unwrap();
+    let res = request(pairs, url).await.unwrap();
 
     return Ok(res);
 }
@@ -484,16 +464,13 @@ async fn delete_app(matches: &ArgMatches<'_>) {
         process::exit(0);
     }
 
-    let pairs = vec![
-        ("_api_key", api_key),
-        (
-            "appKey",
-            matches.value_of("delete").unwrap_or("").to_string(),
-        ),
+    let pairs: Vec<(&str, &str)> = vec![
+        ("_api_key", &api_key),
+        ("appKey", matches.value_of("delete").unwrap_or("")),
     ];
 
     let url = "https://www.pgyer.com/apiv2/app/deleteApp";
-    let res = request(pairs, url.to_owned()).await.unwrap();
+    let res = request(pairs, url).await.unwrap();
     let build_code = res.get("code").unwrap().as_i64().unwrap() as i32;
     println!("删除中...");
     if build_code != 0 {
@@ -508,10 +485,10 @@ async fn delete_app(matches: &ArgMatches<'_>) {
 async fn get_app_list(page: &str) {
     let api_key = get_api_key();
 
-    let pairs = vec![("_api_key", api_key), ("page", page.to_string())];
+    let pairs: Vec<(&str, &str)> = vec![("_api_key", &api_key), ("page", page)];
 
     let url = "https://www.pgyer.com/apiv2/app/listMy";
-    let res = request(pairs, url.to_owned()).await.unwrap();
+    let res = request(pairs, url).await.unwrap();
     let build_code = res.get("code").unwrap().as_i64().unwrap() as i32;
     if build_code != 0 {
         println!("{}", res.get("message").unwrap());
@@ -524,22 +501,19 @@ async fn get_app_list(page: &str) {
     process::exit(0);
 }
 
-async fn get_build_info(build_key: String) -> Result<Value> {
+async fn get_build_info(build_key: &str) -> Result<Value> {
     let api_key = get_api_key();
-    let pairs = vec![
-        ("_api_key", api_key.clone()),
-        ("buildKey", build_key.clone()),
-    ];
+    let pairs: Vec<(&str, &str)> = vec![("_api_key", &api_key), ("buildKey", build_key)];
     let url = format!(
         "https://www.pgyer.com/apiv2/app/buildInfo?_api_key={}&buildKey={}",
-        api_key.clone(),
-        build_key.clone()
+        api_key, build_key
     );
-    let res = request(pairs, url.to_owned()).await.unwrap();
+    print!("{}", url);
+    let res = request(pairs, &url).await.unwrap();
     return Ok(res);
 }
 
-fn create_form(form_fields: HashMap<&str, String>) -> Form {
+fn create_form(form_fields: HashMap<&str, &str>) -> Form {
     let mut multipart_form = multipart::Form::new();
     for (key, value) in form_fields {
         multipart_form = multipart_form.text(key.to_string(), value.to_string());
@@ -547,7 +521,7 @@ fn create_form(form_fields: HashMap<&str, String>) -> Form {
     multipart_form
 }
 
-async fn request(pairs: Vec<(&str, String)>, url: String) -> Result<Value> {
+async fn request(pairs: Vec<(&str, &str)>, url: &str) -> Result<Value> {
     // Create a HashMap from the predefined pairs
     let form_fields: HashMap<_, _> = pairs.into_iter().collect();
 
