@@ -18,6 +18,7 @@ pub mod app {
     const GB: u64 = MB * 1024;
     const INSTALL_PASSWORD: &str = "2";
     const INSTALL_AT_DATE_RANGE: &str = "1";
+    const PGYER_API_ENDPOINT: &str = "https://www.pgyer.com/apiv2/app/";
 
     async fn upload_file(data: &Value) -> Result<()> {
         let matches = get_command_params();
@@ -306,14 +307,22 @@ pub mod app {
             Arg::with_name("page")
                 .long("page")
                 .value_name("NUMBER")
+                .help("page number")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("delete")
+            Arg::with_name("appKey")
                 .short("r")
                 .long("remove")
                 .value_name("STRING")
                 .help("app key that you want to delete")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("buildKey")
+                .long("removeBuild")
+                .value_name("STRING")
+                .help("build key that you want to delete")
                 .takes_value(true),
         )
         .arg(
@@ -434,28 +443,53 @@ pub mod app {
             process::exit(0);
         }
 
-        let url = "https://www.pgyer.com/apiv2/app/getCOSToken";
-        let res = request(pairs, url).await.unwrap();
+        let url = PGYER_API_ENDPOINT.to_owned() + "getCOSToken";
+        let res = request(pairs, &url).await.unwrap();
 
         return Ok(res);
     }
 
     pub async fn delete_app(matches: &ArgMatches<'_>) {
         let api_key = get_api_key();
-        if matches.value_of("delete").is_none() {
+        if matches.value_of("appKey").is_none() {
             println!("需要 appKey 参数");
             process::exit(0);
         }
 
         let pairs: Vec<(&str, &str)> = vec![
             ("_api_key", &api_key),
-            ("appKey", matches.value_of("delete").unwrap_or("")),
+            ("appKey", matches.value_of("appKey").unwrap_or("")),
         ];
 
-        let url = "https://www.pgyer.com/apiv2/app/deleteApp";
-        let res = request(pairs, url).await.unwrap();
-        let build_code = res.get("code").unwrap().as_i64().unwrap() as i32;
         println!("删除中...");
+        let url = PGYER_API_ENDPOINT.to_owned() + "deleteApp";
+        let res = request(pairs, &url).await.unwrap();
+        let build_code = res.get("code").unwrap();
+        if build_code != 0 {
+            println!("{}", res.get("message").unwrap());
+            process::exit(0);
+        }
+
+        println!("删除成功");
+        process::exit(0);
+    }
+
+    pub async fn delete_build(matches: &ArgMatches<'_>) {
+        let api_key = get_api_key();
+        if matches.value_of("buildKey").is_none() {
+            println!("需要 buildKey 参数");
+            process::exit(0);
+        }
+
+        let pairs: Vec<(&str, &str)> = vec![
+            ("_api_key", &api_key),
+            ("buildKey", matches.value_of("buildKey").unwrap_or("")),
+        ];
+
+        println!("删除中...");
+        let url = PGYER_API_ENDPOINT.to_owned() + "buildDelete";
+        let res = request(pairs, &url).await.unwrap();
+        let build_code = res.get("code").unwrap();
         if build_code != 0 {
             println!("{}", res.get("message").unwrap());
             process::exit(0);
@@ -470,8 +504,8 @@ pub mod app {
 
         let pairs: Vec<(&str, &str)> = vec![("_api_key", &api_key), ("page", page)];
 
-        let url = "https://www.pgyer.com/apiv2/app/listMy";
-        let res = request(pairs, url).await.unwrap();
+        let url = PGYER_API_ENDPOINT.to_owned() + "listMy";
+        let res = request(pairs, &url).await.unwrap();
         let build_code = res.get("code").unwrap().as_i64().unwrap() as i32;
         if build_code != 0 {
             println!("{}", res.get("message").unwrap());
@@ -492,8 +526,8 @@ pub mod app {
         let api_key = get_api_key();
         let pairs: Vec<(&str, &str)> = vec![("_api_key", &api_key), ("buildKey", build_key)];
         let url = format!(
-            "https://www.pgyer.com/apiv2/app/buildInfo?_api_key={}&buildKey={}",
-            api_key, build_key
+            "{}buildInfo?_api_key={}&buildKey={}",
+            PGYER_API_ENDPOINT, api_key, build_key
         );
         let res = request(pairs, &url).await.unwrap();
         return res;

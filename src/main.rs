@@ -15,8 +15,12 @@ async fn main() {
         app::get_app_list(matches.value_of("page").unwrap_or("1")).await;
     }
 
-    if matches.value_of("delete").is_some() {
+    if matches.value_of("appKey").is_some() {
         app::delete_app(&matches).await;
+    }
+
+    if matches.value_of("buildKey").is_some() {
+        app::delete_build(&matches).await;
     }
 
     if matches.value_of("info").is_some() {
