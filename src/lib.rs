@@ -198,27 +198,21 @@ pub mod app {
 
     pub async fn check_proxy() {
         let client = Client::new();
-        let response = client.get("https://www.google.com").send().await;
-        match response {
-            Ok(res) => {
-                // Check the response status
-                if res.status().is_success() {
-                    // Request was successful, process the response body
-                    // let body = res.text().await.unwrap();
-                    // println!("Response body: {}", body);
-                    println!(
-                        "您使用了代理, 可能导致上传失败, 请关闭代理或者使 pgyer.com 走直连通道!"
-                    );
-                } else {
-                    // Request failed with a non-success status code
-                    println!("Request failed with status code: {}", res.status());
-                }
-            }
-            Err(_err) => {
-                println!("检测网络正常!");
-                // Request failed, handle the error
-                // println!("Request error: {}", err);
-            }
+        let mut is_use_proxy = false;
+        // Check if the HTTP_PROXY or http_proxy environment variable is set
+        if env::var_os("HTTP_PROXY").is_some() || env::var_os("http_proxy").is_some() {
+            is_use_proxy = true;
+            println!("Proxy is configured for HTTP traffic.");
+        }
+
+        // Check if the HTTPS_PROXY or https_proxy environment variable is set
+        if env::var_os("HTTPS_PROXY").is_some() || env::var_os("https_proxy").is_some() {
+            is_use_proxy = true;
+            println!("Proxy is configured for HTTPS traffic.");
+        }
+
+        if is_use_proxy {
+            println!("您使用了代理, 可能导致上传失败, 请关闭代理或者使 pgyer.com 走直连通道!");
         }
 
         let response = client
