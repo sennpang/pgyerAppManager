@@ -1,7 +1,9 @@
 pub mod app {
     use std::{
         collections::HashMap,
-        env, fs,
+        env,
+        error::Error,
+        fs,
         path::Path,
         process, thread,
         time::{Duration, Instant},
@@ -20,7 +22,7 @@ pub mod app {
     const INSTALL_AT_DATE_RANGE: &str = "1";
     const PGYER_API_ENDPOINT: &str = "https://www.pgyer.com/apiv2/app/";
 
-    async fn upload_file(data: &Value) -> Result<()> {
+    async fn upload_file(token_info: &Value) {
         let matches = get_command_params();
 
         let file_path = matches.value_of("file");
@@ -46,16 +48,19 @@ pub mod app {
         let form = reqwest::multipart::Form::new()
             .text(
                 "signature",
-                data["params"]["signature"].as_str().unwrap().to_owned(),
-            )
-            .text(
-                "x-cos-security-token",
-                data["params"]["x-cos-security-token"]
+                token_info["params"]["signature"]
                     .as_str()
                     .unwrap()
                     .to_owned(),
             )
-            .text("key", data["key"].as_str().unwrap().to_owned())
+            .text(
+                "x-cos-security-token",
+                token_info["params"]["x-cos-security-token"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+            )
+            .text("key", token_info["key"].as_str().unwrap().to_owned())
             .part(
                 "file",
                 reqwest::multipart::Part::bytes(
@@ -66,7 +71,10 @@ pub mod app {
 
         let client = reqwest::Client::builder().build().unwrap();
         let request = client
-            .request(reqwest::Method::POST, data["endpoint"].as_str().unwrap())
+            .request(
+                reqwest::Method::POST,
+                token_info["endpoint"].as_str().unwrap(),
+            )
             .multipart(form);
 
         println!("上传中...");
@@ -88,10 +96,11 @@ pub mod app {
         println!("上传耗时: {:.2} 秒", duration); // Calculate the run time duration
 
         println!("上传完成, 服务端处理中...");
-        let current_time = Local::now();
-        println!("当前时间: {}", current_time);
+        println!("当前时间: {}", Local::now());
+        println!("获取应用信息...");
+
         while build_code != 0 {
-            let build_info = get_build_info(data["key"].as_str().unwrap()).await;
+            let build_info = get_build_info(token_info["key"].as_str().unwrap()).await;
             build_code = build_info.get("code").unwrap().as_i64().unwrap();
             thread::sleep(Duration::from_secs(1));
 
@@ -101,26 +110,7 @@ pub mod app {
 
             if build_code == 0 {
                 println!("应用信息: ");
-                println!(
-                    "buildVersion: {}",
-                    build_info["data"]["buildBuildVersion"].as_str().unwrap()
-                );
-                println!(
-                    "buildCreated: {}",
-                    build_info["data"]["buildCreated"].as_str().unwrap()
-                );
-                println!(
-                    "buildDescription: {}",
-                    build_info["data"]["buildDescription"].as_str().unwrap()
-                );
-                println!(
-                    "buildQRCodeURL: {}",
-                    build_info["data"]["buildQRCodeURL"].as_str().unwrap()
-                );
-                println!(
-                    "buildShortcutUrl: https://www.pgyer.com/{}",
-                    build_info["data"]["buildShortcutUrl"].as_str().unwrap()
-                );
+                pretty_json(&build_info);
                 process::exit(0);
             }
 
@@ -128,12 +118,7 @@ pub mod app {
                 println!("服务端处理失败了!");
                 break;
             }
-
-            println!("{}", build_info);
-            process::exit(1);
         }
-
-        Ok(())
     }
 
     pub fn check_params() {
@@ -190,14 +175,11 @@ pub mod app {
         check_proxy().await;
 
         let token_info = get_cos_token(&matches, build_type).await.unwrap();
-        let res = upload_file(&token_info.get("data").unwrap()).await;
-        match res {
-            error => println!("{:?}", error),
-        }
+        check_endpoint(token_info["data"]["endpoint"].as_str().unwrap()).await;
+        upload_file(&token_info["data"]).await;
     }
 
     pub async fn check_proxy() {
-        let client = Client::new();
         let mut is_use_proxy = false;
         // Check if the HTTP_PROXY or http_proxy environment variable is set
         if env::var_os("HTTP_PROXY").is_some() || env::var_os("http_proxy").is_some() {
@@ -214,11 +196,11 @@ pub mod app {
         if is_use_proxy {
             println!("您使用了代理, 可能导致上传失败, 请关闭代理或者使 pgyer.com 走直连通道!");
         }
+    }
 
-        let response = client
-            .get("https://pgy-apps-1251724549.cos.ap-guangzhou.myqcloud.com/")
-            .send()
-            .await;
+    pub async fn check_endpoint(endpoint: &str) {
+        let client = Client::new();
+        let response = client.get(endpoint).send().await;
         match response {
             Ok(res) => {
                 if res.status().is_success() {
@@ -229,10 +211,12 @@ pub mod app {
                         "myqcloud.com Request failed with status code: {}",
                         res.status()
                     );
+                    process::exit(0)
                 }
             }
-            Err(_err) => {
-                println!("Request error: {}", _err);
+            Err(err) => {
+                println!("Request error: {:?}", err.source());
+                process::exit(0)
             }
         }
     }
@@ -546,9 +530,39 @@ pub mod app {
         let client = reqwest::Client::builder().build().unwrap();
         let request = client.request(reqwest::Method::POST, url).multipart(form);
 
-        let response = request.send().await.unwrap();
-        let body = response.text().await.unwrap();
-        let person: Value = serde_json::from_str(body.as_str()).unwrap();
-        Ok(person)
+        let response = request.send().await;
+        match response {
+            Ok(res) => {
+                match res.status() {
+                    reqwest::StatusCode::OK => {
+                        // Handle a successful response (status code 200)
+                        // let body = res.text().await.unwrap();
+                        // println!("Response body: {}", body);
+                        let body = res.text().await.unwrap();
+                        let person: Value = serde_json::from_str(body.as_str()).unwrap();
+                        return Ok(person);
+                    }
+                    reqwest::StatusCode::NO_CONTENT => {
+                        // Handle a "Not Found" response (status code 404)
+                        return Ok(().into());
+                    }
+                    reqwest::StatusCode::NOT_FOUND => {
+                        // Handle a "Not Found" response (status code 404)
+                        println!("404: Page not found");
+                        process::exit(0)
+                    }
+                    _ => {
+                        // Handle other response statuses
+                        println!("Received response with status: {}", res.status());
+                        process::exit(0)
+                    }
+                }
+            }
+            Err(err) => {
+                // Handle a request error
+                println!("Request error: {}", err);
+                process::exit(0)
+            }
+        }
     }
 }
