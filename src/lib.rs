@@ -8,7 +8,7 @@ pub mod app {
     };
 
     use chrono::Local;
-    use clap::{App, Arg, ArgMatches};
+    use clap::{App, AppSettings, Arg, ArgMatches};
     use reqwest::{
         multipart::{self, Form},
         Client,
@@ -243,8 +243,8 @@ pub mod app {
         }
     }
 
-    pub fn get_command_params() -> ArgMatches<'static> {
-        let matches = App::new("PGYER APP MANAGER")
+    fn get_app_cli() -> App<'static, 'static> {
+        return App::new("PGYER APP MANAGER")
         .version("0.1")
         .author("PANG")
         .about("PGYER APP MANAGER")
@@ -355,14 +355,12 @@ pub mod app {
               .value_name("STRING")
               .help("get build info with build key")
               .takes_value(true),
-      )
-        .get_matches();
-        if matches.args.is_empty() {
-            println!("-h 获取帮助信息");
-            process::exit(0);
-        }
+      ).setting(AppSettings::ArgRequiredElseHelp);
+    }
 
-        matches
+    pub fn get_command_params() -> ArgMatches<'static> {
+        let app = get_app_cli();
+        return app.get_matches();
     }
 
     fn set_api_key(api_key: &str) {
