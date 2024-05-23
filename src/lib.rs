@@ -21,6 +21,7 @@ pub mod app {
     const INSTALL_PASSWORD: &str = "2";
     const INSTALL_AT_DATE_RANGE: &str = "1";
     const PGYER_API_ENDPOINT: &str = "https://www.pgyer.com/apiv2/app/";
+    const VERSION_NUMBER: &str = "0.2.3";
 
     async fn upload_file(token_info: &Value) {
         let matches = get_command_params();
@@ -52,6 +53,10 @@ pub mod app {
                     .as_str()
                     .unwrap()
                     .to_owned(),
+            )
+            .text(
+                "x-cos-meta-file-name",
+                file_name.unwrap().to_str().unwrap().to_owned(),
             )
             .text(
                 "x-cos-security-token",
@@ -110,7 +115,7 @@ pub mod app {
 
             if build_code == 0 {
                 println!("应用信息: ");
-                pretty_json(&build_info);
+                pretty_json(&build_info.get("data").unwrap());
                 process::exit(0);
             }
 
@@ -223,7 +228,7 @@ pub mod app {
 
     fn get_app_cli() -> App<'static, 'static> {
         return App::new("PGYER APP MANAGER")
-        .version("0.1")
+        .version(VERSION_NUMBER)
         .author("PANG")
         .about("PGYER APP MANAGER")
         .arg(
